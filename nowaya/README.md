@@ -1,1 +1,1 @@
-My first chaotic ReacJS application 😇
+My first chaotic ReactJS application 😇
