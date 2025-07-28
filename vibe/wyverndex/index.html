@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wyverndex</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="wyvernData.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'pulse-glow': 'pulse-glow 2s infinite',
+                        'shimmer': 'shimmer 2s infinite',
+                    },
+                    keyframes: {
+                        'pulse-glow': {
+                            '0%, 100%': { boxShadow: '0 0 10px rgba(139, 92, 246, 0.5)' },
+                            '50%': { boxShadow: '0 0 20px rgba(139, 92, 246, 0.8)' },
+                        },
+                        'shimmer': {
+                            '0%': { transform: 'translateX(-100%)' },
+                            '100%': { transform: 'translateX(100%)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .wyvern-gradient-fire { background: linear-gradient(45deg, #ff4757, #ff6348); }
+        .wyvern-gradient-lightning { background: linear-gradient(45deg, #3742fa, #5352ed); }
+        .wyvern-gradient-poison { background: linear-gradient(45deg, #2ed573, #7bed9f); }
+        .wyvern-gradient-ice { background: linear-gradient(45deg, #70a1ff, #5352ed); }
+        .wyvern-gradient-forest { background: linear-gradient(45deg, #ff9f43, #ffa502); }
+        
+        .progress-shimmer::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        .alert-blink {
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-base-200">
+    <div id="app" class="min-h-screen">
+        <!-- Navbar -->
+        <div class="navbar bg-base-100 shadow-lg mb-2">
+            <div class="navbar-start">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-dragon text-2xl text-primary"></i>
+                    <div>
+                        <h1 class="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                            Wyverndex Pro
+                        </h1>
+                        <p class="text-xs opacity-70">Tracker ARK: Survival Evolved</p>
+                    </div>
+                </div>
+            </div>
+            <div class="navbar-end">
+                <div class="stats bg-base-200 shadow text-xs">
+                    <div class="stat px-3 py-2">
+                        <div class="stat-title text-xs">Wyverns</div>
+                        <div class="stat-value text-sm text-primary">{{ wyverns.length }}</div>
+                    </div>
+                    <div class="stat px-3 py-2">
+                        <div class="stat-title text-xs">Critiques</div>
+                        <div class="stat-value text-sm text-error">{{ getCriticalWyverns() }}</div>
+                    </div>
+                    <div class="stat px-3 py-2">
+                        <div class="stat-title text-xs">Lait/h</div>
+                        <div class="stat-value text-sm text-secondary">{{ getTotalMilkNeeded() }}</div>
+                    </div>
+                </div>
+                <button class="btn btn-ghost btn-circle ml-2" @click="requestNotificationPermission" :class="{ 'text-success': notificationPermission === 'granted' }">
+                    <i class="fas fa-bell text-lg" :class="{'fa-shake': notificationPermission === 'default'}"></i>
+                </button>
+                <button class="btn btn-ghost btn-circle ml-2" @click="showConfig = !showConfig">
+                    <i class="fas fa-cog text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="container mx-auto px-4 pb-4">
+            <!-- Configuration Panel -->
+            <div v-show="showConfig" class="collapse collapse-open bg-base-100 shadow-lg mb-4">
+                <div class="collapse-title text-lg font-medium bg-primary text-primary-content">
+                    <i class="fas fa-cog mr-2"></i>Configuration Avancée
+                </div>
+                <div class="collapse-content bg-base-100">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4">
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Consommation base</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="config.foodConsumptionRate" step="0.001" min="0">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Croissance (x)</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="config.growthMultiplier" step="0.1" min="0.1">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Consommation (x)</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="config.foodConsumptionMultiplier" step="0.1" min="0.1">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Baby fin (%)</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="config.babyStageEnd" min="0" max="100">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Juvenile fin (%)</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="config.juvenileStageEnd" min="0" max="100">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Valeur lait</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="config.milkFoodValue" min="0">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Wyvern Form -->
+            <div class="card bg-base-100 shadow-lg mb-4">
+                <div class="card-body p-4">
+                    <h2 class="card-title text-lg">
+                        <i class="fas fa-plus text-primary"></i>
+                        Ajouter une Wyvern
+                    </h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Nom</span>
+                            </label>
+                            <input type="text" class="input input-bordered input-sm" 
+                                   v-model="newWyvern.name" placeholder="Nom de la Wyvern" 
+                                   @keyup.enter="addWyvern">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Type</span>
+                            </label>
+                            <select class="select select-bordered select-sm" v-model="newWyvern.type">
+                                <option v-for="(type, key) in wyvernTypes" :key="key" :value="key">
+                                    {{ type.icon }} {{ type.name }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Nourriture</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="newWyvern.currentFood" min="0" step="0.1" placeholder="1200">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Max nourriture</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="newWyvern.maxFood" min="0" step="0.1" placeholder="1800">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Croissance (%)</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="newWyvern.growthPercentage" min="0" max="100" step="0.1" placeholder="15.5">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1">
+                                <span class="label-text text-xs">Niveau</span>
+                            </label>
+                            <input type="number" class="input input-bordered input-sm" 
+                                   v-model.number="newWyvern.level" min="1" max="190" placeholder="150">
+                        </div>
+                    </div>
+                    <div class="card-actions justify-end mt-3">
+                        <button class="btn btn-primary btn-sm" @click="addWyvern">
+                            <i class="fas fa-plus mr-1"></i>Ajouter
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- No Wyverns Message -->
+            <transition name="fade">
+                <div v-if="wyverns.length === 0" class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Aucune Wyvern suivie. Utilisez le formulaire ci-dessus pour ajouter votre première Wyvern.</span>
+                </div>
+            </transition>
+
+            <!-- Wyvern Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <transition-group name="slide" tag="div" class="contents">
+                    <div v-for="(wyvern, index) in wyverns" :key="wyvern.id" 
+                         class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow">
+                        
+                        <!-- Wyvern Header -->
+                        <div class="card-body p-4">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="flex-1">
+                                    <h3 class="card-title text-lg">{{ wyvern.name }}</h3>
+                                    <p class="text-sm opacity-70">{{ getGrowthStageDescription(wyvern) }}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="badge badge-lg"
+                                         :class="'wyvern-gradient-' + wyvern.type">
+                                        {{ wyvernTypes[wyvern.type].icon }} {{ wyvernTypes[wyvern.type].name }}
+                                    </div>
+                                    <button class="btn btn-error btn-xs" @click="removeWyvern(index)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Stats Grid -->
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                <div class="stat bg-base-200 rounded p-2">
+                                    <div class="stat-title text-xs">Nourriture</div>
+                                    <div class="stat-value text-sm">{{ wyvern.currentFood.toFixed(1) }}/{{ wyvern.maxFood }}</div>
+                                    <div class="stat-desc">
+                                        <progress class="progress progress-primary w-full h-2 relative progress-shimmer" 
+                                                  :value="wyvern.currentFood" :max="wyvern.maxFood"></progress>
+                                    </div>
+                                </div>
+                                <div class="stat bg-base-200 rounded p-2">
+                                    <div class="stat-title text-xs">Croissance</div>
+                                    <div class="stat-value text-sm">{{ wyvern.growthPercentage.toFixed(1) }}%</div>
+                                    <div class="stat-desc">
+                                        <progress class="progress progress-secondary w-full h-2" 
+                                                  :value="wyvern.growthPercentage" max="100"></progress>
+                                    </div>
+                                </div>
+                                <div class="stat bg-base-200 rounded p-2">
+                                    <div class="stat-title text-xs">Avant famine</div>
+                                    <div class="stat-value text-sm">{{ getTimeToStarvation(wyvern) }}</div>
+                                </div>
+                                <div class="stat bg-base-200 rounded p-2">
+                                    <div class="stat-title text-xs">Consommation/h</div>
+                                    <div class="stat-value text-sm">{{ getFoodConsumptionPerHour(wyvern) }}</div>
+                                </div>
+                            </div>
+
+                            <!-- Alerts -->
+                            <div v-if="wyvern.currentFood <= config.alertThresholds.critical" 
+                                 class="alert alert-error text-xs p-2 mb-2 animate-pulse">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <span>CRITIQUE: Nourrir immédiatement !</span>
+                            </div>
+                            <div v-else-if="wyvern.currentFood <= config.alertThresholds.warning" 
+                                 class="alert alert-warning text-xs p-2 mb-2">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>ATTENTION: Niveau bas</span>
+                            </div>
+                            <div v-if="getTimeToStarvationMinutes(wyvern) <= config.alertThresholds.urgent && getTimeToStarvationMinutes(wyvern) > 0" 
+                                 class="alert alert-error text-xs p-2 mb-2 alert-blink">
+                                <i class="fas fa-clock"></i>
+                                <span>URGENT: {{ Math.round(getTimeToStarvationMinutes(wyvern)) }}min restantes</span>
+                            </div>
+
+                            <!-- Milk Calculator -->
+                            <div class="bg-base-200 rounded p-3">
+                                <h4 class="text-sm font-semibold mb-2 flex items-center gap-1">
+                                    <i class="fas fa-tint text-primary"></i>Lait requis
+                                </h4>
+                                <div class="grid grid-cols-4 gap-1 text-xs">
+                                    <div class="text-center bg-base-100 rounded p-1">
+                                        <div class="font-semibold">1h</div>
+                                        <div class="text-primary">{{ getMilkNeeded(wyvern, 1) }}</div>
+                                    </div>
+                                    <div class="text-center bg-base-100 rounded p-1">
+                                        <div class="font-semibold">4h</div>
+                                        <div class="text-primary">{{ getMilkNeeded(wyvern, 4) }}</div>
+                                    </div>
+                                    <div class="text-center bg-base-100 rounded p-1">
+                                        <div class="font-semibold">8h</div>
+                                        <div class="text-primary">{{ getMilkNeeded(wyvern, 8) }}</div>
+                                    </div>
+                                    <div class="text-center bg-base-100 rounded p-1">
+                                        <div class="font-semibold">12h</div>
+                                        <div class="text-primary">{{ getMilkNeeded(wyvern, 12) }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition-group>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    wyvernTypes: window.WyvernData.WYVERN_TYPES,
+                    config: { ...window.WyvernData.DEFAULT_CONFIG },
+                    showConfig: false,
+                    newWyvern: {
+                        name: '',
+                        type: 'fire',
+                        currentFood: 1200.0,
+                        maxFood: 1800.0,
+                        growthPercentage: 0,
+                        level: 1
+                    },
+                    wyverns: [],
+                    updateInterval: null,
+                    lastUpdate: Date.now(),
+                    notificationPermission: 'default'
+                }
+            },
+            mounted() {
+                this.loadData();
+                this.startTracking();
+                
+                if ('permissions' in navigator) {
+                    navigator.permissions.query({name: 'notifications'}).then(permissionStatus => {
+                        this.notificationPermission = permissionStatus.state;
+                        permissionStatus.onchange = () => {
+                            this.notificationPermission = permissionStatus.state;
+                        };
+                    });
+                } else {
+                    this.notificationPermission = Notification.permission;
+                }
+
+                // Add visibility change listener to pause/resume when tab is not active
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        this.pauseTracking();
+                    } else {
+                        this.resumeTracking();
+                    }
+                });
+            },
+            beforeUnmount() {
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                }
+            },
+            methods: {
+                addWyvern() {
+                    if (!this.newWyvern.name.trim()) {
+                        alert('Veuillez entrer un nom pour la Wyvern');
+                        return;
+                    }
+
+                    if (this.newWyvern.currentFood > this.newWyvern.maxFood) {
+                        alert('La nourriture actuelle ne peut pas dépasser la nourriture maximale');
+                        return;
+                    }
+
+                    const wyvern = {
+                        id: Date.now() + Math.random(),
+                        name: this.newWyvern.name,
+                        type: this.newWyvern.type,
+                        currentFood: this.newWyvern.currentFood,
+                        maxFood: this.newWyvern.maxFood,
+                        growthPercentage: this.newWyvern.growthPercentage,
+                        level: this.newWyvern.level || 1,
+                        lastUpdate: Date.now(),
+                        createdAt: Date.now()
+                    };
+
+                    this.wyverns.push(wyvern);
+                    this.saveData();
+
+                    // Reset form
+                    this.newWyvern = {
+                        name: '',
+                        type: 'fire',
+                        currentFood: 1200,
+                        maxFood: 1800,
+                        growthPercentage: 0,
+                        level: 1
+                    };
+                },
+                removeWyvern(index) {
+                    if (confirm(`Êtes-vous sûr de vouloir supprimer ${this.wyverns[index].name} ?`)) {
+                        this.wyverns.splice(index, 1);
+                        this.saveData();
+                    }
+                },
+                getGrowthStageDescription(wyvern) {
+                    const stage = window.WyvernData.WyvernCalculations.getCurrentStage(wyvern.growthPercentage);
+                    return `${stage.name} (${wyvern.growthPercentage.toFixed(1)}%)`;
+                },
+                getFoodConsumptionRate(wyvern) {
+                    return window.WyvernData.WyvernCalculations.getFoodConsumptionRate(
+                        wyvern.growthPercentage, 
+                        this.config
+                    );
+                },
+                getFoodConsumptionPerHour(wyvern) {
+                    const rate = this.getFoodConsumptionRate(wyvern);
+                    return (rate * 3600).toFixed(1);
+                },
+                getTimeToStarvation(wyvern) {
+                    const seconds = window.WyvernData.WyvernCalculations.getTimeToStarvation(
+                        wyvern.currentFood,
+                        wyvern.growthPercentage,
+                        this.config
+                    );
+                    return window.WyvernData.WyvernCalculations.formatTime(seconds);
+                },
+                getTimeToStarvationMinutes(wyvern) {
+                    const seconds = window.WyvernData.WyvernCalculations.getTimeToStarvation(
+                        wyvern.currentFood,
+                        wyvern.growthPercentage,
+                        this.config
+                    );
+                    return seconds === Infinity ? Infinity : Math.floor(seconds / 60);
+                },
+                getMilkNeeded(wyvern, hours) {
+                    return window.WyvernData.WyvernCalculations.getMilkNeeded(
+                        hours,
+                        wyvern.growthPercentage,
+                        this.config
+                    );
+                },
+                getActiveWyverns() {
+                    return this.wyverns.filter(w => w.growthPercentage < 100).length;
+                },
+                getCriticalWyverns() {
+                    return this.wyverns.filter(w => 
+                        w.currentFood <= this.config.alertThresholds.critical && 
+                        w.growthPercentage < 100
+                    ).length;
+                },
+                getTotalMilkNeeded() {
+                    return this.wyverns.reduce((total, wyvern) => {
+                        if (wyvern.growthPercentage >= 100) return total;
+                        return total + this.getMilkNeeded(wyvern, 1);
+                    }, 0);
+                },
+                startTracking() {
+                    if (this.updateInterval) clearInterval(this.updateInterval);
+                    this.updateInterval = setInterval(() => {
+                        this.updateWyvernStats();
+                    }, this.config.updateInterval);
+                },
+                updateWyvernStats() {
+                    const now = Date.now();
+                    let hasChanges = false;
+
+                    const totalGrowthSeconds = window.WyvernData.WyvernCalculations.getAdjustedGrowthTime(
+                        window.WyvernData.GROWTH_MECHANICS.maturationTimes.total,
+                        this.config
+                    );
+                    const growthPerSecond = 100 / totalGrowthSeconds;
+                    
+                    this.wyverns.forEach(wyvern => {
+                        if (wyvern.growthPercentage >= 100) return;
+
+                        const timeDiff = (now - wyvern.lastUpdate) / 1000; // seconds
+                        
+                        // Update food
+                        const consumptionRate = this.getFoodConsumptionRate(wyvern);
+                        const foodConsumed = consumptionRate * timeDiff;
+                        if (foodConsumed > 0) {
+                            wyvern.currentFood = Math.max(0, wyvern.currentFood - foodConsumed);
+                            hasChanges = true;
+                        }
+
+                        // Update growth
+                        const growthToAdd = timeDiff * growthPerSecond;
+                        if (growthToAdd > 0) {
+                            wyvern.growthPercentage = Math.min(100, wyvern.growthPercentage + growthToAdd);
+                            hasChanges = true;
+                        }
+
+                        this.checkAndNotify(wyvern);
+                        
+                        wyvern.lastUpdate = now;
+                    });
+
+                    if (hasChanges) {
+                        this.saveData();
+                    }
+                },
+                pauseTracking() {
+                    if (this.updateInterval) {
+                        clearInterval(this.updateInterval);
+                        this.updateInterval = null;
+                    }
+                },
+                resumeTracking() {
+                    if (!this.updateInterval) {
+                        // Immediately update food levels to account for the time the tab was hidden
+                        this.updateWyvernStats(); 
+                        // Then restart the regular updates
+                        this.startTracking();
+                    }
+                },
+                saveData() {
+                    const data = {
+                        config: this.config,
+                        wyverns: this.wyverns,
+                        lastSave: Date.now()
+                    };
+                    localStorage.setItem('wyverndex-pro-data', JSON.stringify(data));
+                },
+                loadData() {
+                    const saved = localStorage.getItem('wyverndex-pro-data');
+                    if (saved) {
+                        try {
+                            const data = JSON.parse(saved);
+                            if (data.config) {
+                                this.config = { ...this.config, ...data.config };
+                            }
+                            if (data.wyverns) {
+                                this.wyverns = data.wyverns.map(wyvern => ({
+                                    ...wyvern,
+                                    lastUpdate: wyvern.lastUpdate || Date.now()
+                                }));
+                            }
+                        } catch (error) {
+                            console.error('Erreur lors du chargement des données:', error);
+                        }
+                    }
+                },
+                exportData() {
+                    const data = {
+                        config: this.config,
+                        wyverns: this.wyverns,
+                        exportDate: new Date().toISOString()
+                    };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], {
+                        type: 'application/json'
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `wyverndex-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+                requestNotificationPermission() {
+                    if (this.notificationPermission === 'granted') {
+                        this.showNotification('Test', 'Les notifications sont déjà activées !');
+                        return;
+                    }
+                    
+                    if (this.notificationPermission === 'denied') {
+                        alert('Les notifications ont été bloquées. Veuillez les réactiver dans les paramètres de votre navigateur pour cette page.');
+                        return;
+                    }
+
+                    Notification.requestPermission().then(permission => {
+                        this.notificationPermission = permission;
+                        if (permission === 'granted') {
+                            this.showNotification('Wyverndex Pro', 'Notifications activées !');
+                        }
+                    });
+                },
+                showNotification(title, body, wyvern = null) {
+                    if (this.notificationPermission !== 'granted') return;
+
+                    const options = {
+                        body: body,
+                        icon: './assets/wyvern-logo.png',
+                        vibrate: [200, 100, 200],
+                        tag: wyvern ? `wyvern-${wyvern.id}` : 'general'
+                    };
+                    
+                    new Notification(title, options);
+                },
+                checkAndNotify(wyvern) {
+                    const wasNotified = wyvern.notifiedCritical || false;
+                    const isCritical = wyvern.currentFood <= this.config.alertThresholds.critical;
+
+                    if (isCritical && !wasNotified) {
+                        this.showNotification(
+                            `🚨 ALERTE FAMINE - ${wyvern.name}`,
+                            `Nourriture critique: ${wyvern.currentFood.toFixed(0)}/${wyvern.maxFood}. Il faut nourrir cette wyvern immédiatement !`,
+                            wyvern
+                        );
+                        wyvern.notifiedCritical = true;
+                    } else if (!isCritical && wasNotified) {
+                        wyvern.notifiedCritical = false;
+                    }
+                }
+            },
+            watch: {
+                config: {
+                    handler() {
+                        this.saveData();
+                    },
+                    deep: true
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
